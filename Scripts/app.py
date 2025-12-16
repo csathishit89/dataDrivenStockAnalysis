@@ -261,7 +261,7 @@ with col1:
     output_file_name = BASE_DIR / "monthly_top5_gainers_losers.csv"
     monthly_breakdown.to_csv(output_file_name, index=False)
 
-    num_plots = min(12, len(all_months))
+    num_plots = len(all_months)
     if num_plots > 0:
         fig, axes = plt.subplots(num_plots, 2, figsize=(14, 6 * num_plots))
         axes = axes.flatten()
