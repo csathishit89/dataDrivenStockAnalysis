@@ -4,6 +4,25 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import connectionInfo
+from sqlalchemy import create_engine
+
+DB_HOST = "localhost"     # e.g., 'localhost'
+DB_NAME = "stockAnalysis"
+DB_USER = "postgres"
+DB_PASS = "Password#1234"
+DB_PORT = "5432"                   # Default PostgreSQL port
+
+# --- 2. Create the Database URI String ---
+# Format: 'postgresql+driver://user:password@host:port/database'
+# The standard driver is 'psycopg2'
+DATABASE_URI = (
+    f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)
+
+engine = create_engine(DATABASE_URI)
+print("SQLAlchemy Engine created successfully.")
+    
 BASE_DIR = Path(__file__).resolve().parent
 
 st.set_page_config(
@@ -15,11 +34,40 @@ st.set_page_config(
 
 csv_path = BASE_DIR / "final_output.csv"
 
-stock_df = pd.read_csv(csv_path)
+SQL_Query = "SELECT sec.symbol as Ticker, st.close_price as close, st.stock_datetime as date, st.high, st.low, st.month, st.open, st.volume FROM stocks st left join sector sec on st.sectorid::integer = sec.sectorid"
+
+stock_df = pd.read_sql_query(SQL_Query, engine)
+
+# stock_df = pd.read_csv(csv_path)
+print(stock_df.columns)
+
+stock_df['close'] = pd.to_numeric(
+    stock_df['close'].astype(str).str.replace(',', '', regex=False).str.strip(), 
+    errors='coerce'
+)
+
+# You should apply this to any price or volume columns used in calculations:
+stock_df['open'] = pd.to_numeric(
+    stock_df['open'].astype(str).str.replace(',', '', regex=False).str.strip(), 
+    errors='coerce'
+)
+stock_df['high'] = pd.to_numeric(
+    stock_df['high'].astype(str).str.replace(',', '', regex=False).str.strip(), 
+    errors='coerce'
+)
+stock_df['low'] = pd.to_numeric(
+    stock_df['low'].astype(str).str.replace(',', '', regex=False).str.strip(), 
+    errors='coerce'
+)
+
+stock_df['volume'] = pd.to_numeric(
+    stock_df['volume'].astype(str).str.replace(',', '', regex=False).str.strip(), 
+    errors='coerce'
+)
 
 stock_df['date'] = pd.to_datetime(stock_df['date'])
-stock_df = stock_df.sort_values(['Ticker', 'date'])
-yearly_return = stock_df.groupby('Ticker').apply(
+stock_df = stock_df.sort_values(['ticker', 'date'])
+yearly_return = stock_df.groupby('ticker').apply(
     lambda x: ((x['close'].iloc[-1] - x['open'].iloc[0]) / x['open'].iloc[0]) * 100
 ).reset_index(name='Yearly Return')
 
@@ -95,11 +143,11 @@ with col1:
     st.subheader('Volatility Analysis')
 
 stock_df['date'] = pd.to_datetime(stock_df['date'])
-stock_df = stock_df.sort_values(['Ticker', 'date'])
+stock_df = stock_df.sort_values(['ticker', 'date'])
 
-stock_df['daily_return'] = stock_df.groupby('Ticker')['close'].pct_change()
+stock_df['daily_return'] = stock_df.groupby('ticker')['close'].pct_change()
 
-volatility_df = stock_df.groupby('Ticker')['daily_return'].std().reset_index()
+volatility_df = stock_df.groupby('ticker')['daily_return'].std().reset_index()
 volatility_df.columns = ['Ticker', 'Volatility']
 volatility_df = volatility_df.dropna()
 top10_volatility = volatility_df.sort_values('Volatility', ascending=False).head(10)
@@ -125,17 +173,17 @@ with col1:
 col1, = st.columns(1)
 with col1:
     stock_df['date'] = pd.to_datetime(stock_df['date'])
-    stock_df = stock_df.sort_values(['Ticker', 'date'])
-    stock_df['daily_return'] = stock_df.groupby('Ticker')['close'].pct_change()
-    stock_df['cumulative_return'] = (1 + stock_df['daily_return']).groupby(stock_df['Ticker']).cumprod() - 1
-    final_returns = stock_df.groupby('Ticker')['cumulative_return'].last().sort_values(ascending=False)
+    stock_df = stock_df.sort_values(['ticker', 'date'])
+    stock_df['daily_return'] = stock_df.groupby('ticker')['close'].pct_change()
+    stock_df['cumulative_return'] = (1 + stock_df['daily_return']).groupby(stock_df['ticker']).cumprod() - 1
+    final_returns = stock_df.groupby('ticker')['cumulative_return'].last().sort_values(ascending=False)
     top5_tickers = final_returns.head(5).index.tolist()
     
-    plot_df = stock_df[stock_df['Ticker'].isin(top5_tickers)]
+    plot_df = stock_df[stock_df['ticker'].isin(top5_tickers)]
     plt.figure(figsize=(6, 4))
 
     for ticker in top5_tickers:
-        df_temp = plot_df[plot_df['Ticker'] == ticker]
+        df_temp = plot_df[plot_df['ticker'] == ticker]
         plt.plot(df_temp['date'], df_temp['cumulative_return'], label=ticker)
 
         plt.xlabel("Date")
@@ -156,11 +204,11 @@ with col1:
     sector_df = pd.read_csv(csv_path)
 
     stock_df['date'] = pd.to_datetime(stock_df['date'])
-    stock_df = stock_df.sort_values(['Ticker', 'date'])
+    stock_df = stock_df.sort_values(['ticker', 'date'])
 
     yearly_return = (
-        stock_df.sort_values(['Ticker', 'date'])
-            .groupby('Ticker')
+        stock_df.sort_values(['ticker', 'date'])
+            .groupby('ticker')
             .agg(
                 start_price=('close', 'first'),
                 end_price=('close', 'last')
@@ -173,9 +221,9 @@ with col1:
     )
 
 
-    sector_df['Ticker'] = sector_df['Symbol'].apply(lambda x: x.split(': ')[-1].strip())
+    sector_df['ticker'] = sector_df['Symbol'].apply(lambda x: x.split(': ')[-1].strip())
 
-    merged_df = yearly_return.merge(sector_df, on='Ticker', how='left')
+    merged_df = yearly_return.merge(sector_df, on='ticker', how='left')
     sector_performance = merged_df.groupby('Sector')['Yearly Return'].mean().reset_index()
     
     plt.figure(figsize=(12, 6))
@@ -198,7 +246,7 @@ col1, = st.columns(1)
 with col1:
     st.subheader('Stock Price Correlation')
 
-    price_pivot = stock_df.pivot(index='date', columns='Ticker', values='close')
+    price_pivot = stock_df.pivot(index='date', columns='ticker', values='close')
 
     returns = price_pivot.pct_change().dropna()
     corr_matrix = returns.corr()
@@ -230,10 +278,10 @@ with col1:
     st.subheader('Top 5 Gainers and Losers (Month-wise)')
     
     stock_df['date'] = pd.to_datetime(stock_df['date'], utc=True)
-    stock_df = stock_df.sort_values(['Ticker', 'date'])
+    stock_df = stock_df.sort_values(['ticker', 'date'])
 
     monthly_data = stock_df.groupby([
-        'Ticker', 
+        'ticker', 
         stock_df['date'].dt.to_period('M') 
     ])['close'].agg(['first', 'last']).reset_index()
 
@@ -276,7 +324,7 @@ with col1:
             
             ax_gainer = axes[plot_index]
             gainers_df = gainers_df.sort_values('Monthly_Return', ascending=True) 
-            ax_gainer.barh(gainers_df['Ticker'], gainers_df['Monthly_Return'], color='green')
+            ax_gainer.barh(gainers_df['ticker'], gainers_df['Monthly_Return'], color='green')
             ax_gainer.set_title(f'Top 5 Gainers: {month}', fontsize=12)
             ax_gainer.set_xlabel('Return (%)', fontsize=10)
             ax_gainer.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2%}'))
@@ -284,7 +332,7 @@ with col1:
             
             ax_loser = axes[plot_index]
             losers_df = losers_df.sort_values('Monthly_Return', ascending=False) 
-            ax_loser.barh(losers_df['Ticker'], losers_df['Monthly_Return'], color='red')
+            ax_loser.barh(losers_df['ticker'], losers_df['Monthly_Return'], color='red')
             ax_loser.set_title(f'Top 5 Losers: {month}', fontsize=12)
             ax_loser.set_xlabel('Return (%)', fontsize=10)
             ax_loser.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2%}'))
