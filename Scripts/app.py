@@ -151,7 +151,6 @@ col1, = st.columns(1)
 with col1:
     st.subheader('Sector-wise Performance')
 
-    BASE_DIR = Path(__file__).resolve().parent
     csv_path = BASE_DIR / "Sector_data.csv"
 
     sector_df = pd.read_csv(csv_path)
@@ -203,6 +202,17 @@ with col1:
 
     returns = price_pivot.pct_change().dropna()
     corr_matrix = returns.corr()
+    
+    corr_matrix.index.name = 'Ticker1'
+    corr_matrix.columns.name = 'Ticker2'
+    corr_flat = corr_matrix.reset_index()
+    corr_flat = corr_flat.melt(
+        id_vars='Ticker1', 
+        var_name='Ticker2', 
+        value_name='Correlation'
+    )
+    output_file_name = BASE_DIR / "stock_correlation_matrix.csv"
+    corr_flat.to_csv(output_file_name, index=False)
     
     plt.figure(figsize=(16, 10))
     plt.imshow(corr_matrix, cmap='coolwarm', interpolation='nearest')
