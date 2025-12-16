@@ -4,8 +4,15 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 BASE_DIR = Path(__file__).resolve().parent
+
+st.set_page_config(
+    page_title="Stock Analysis",
+    page_icon = BASE_DIR / "stockImg.png",
+    layout="wide"
+)
+
+
 csv_path = BASE_DIR / "final_output.csv"
 
 stock_df = pd.read_csv(csv_path)
@@ -27,7 +34,7 @@ col1, col2, = st.columns([1,1])
 with col1:
     st.header('Market Stock Analysis')
     
-col1, col2, col3, col4, col5 = st.columns(5)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.markdown(f"""
@@ -61,13 +68,13 @@ with col4:
     </div>
     """, unsafe_allow_html=True)
 
-with col5:
-    st.markdown(f"""
-    <div class="metric-box">
-        <div class="metric-title">Green vs Red</div>
-        <div class="metric-value"><span class="valueGreen">{green_count}</span> / <span class="valueRed">{red_count}</span> </div>
-    </div>
-    """, unsafe_allow_html=True)
+# with col5:
+#     st.markdown(f"""
+#     <div class="metric-box">
+#         <div class="metric-title">Green vs Red</div>
+#         <div class="metric-value"><span class="valueGreen">{green_count}</span> / <span class="valueRed">{red_count}</span> </div>
+#     </div>
+#     """, unsafe_allow_html=True)
 
 
 top10_green = yearly_return.sort_values('Yearly Return', ascending=False).head(10)
@@ -145,7 +152,7 @@ with col1:
     st.subheader('Sector-wise Performance')
 
     BASE_DIR = Path(__file__).resolve().parent
-    csv_path = BASE_DIR / "Sector_data - Sheet1.csv"
+    csv_path = BASE_DIR / "Sector_data.csv"
 
     sector_df = pd.read_csv(csv_path)
 
@@ -208,6 +215,76 @@ with col1:
     plt.tight_layout()
     st.pyplot(plt)
 
+col1, = st.columns(1)
+with col1:
+    st.subheader('Top 5 Gainers and Losers (Month-wise)')
+    
+    stock_df['date'] = pd.to_datetime(stock_df['date'], utc=True)
+    stock_df = stock_df.sort_values(['Ticker', 'date'])
+
+    monthly_data = stock_df.groupby([
+        'Ticker', 
+        stock_df['date'].dt.to_period('M') 
+    ])['close'].agg(['first', 'last']).reset_index()
+
+    monthly_data['Monthly_Return'] = (monthly_data['last'] - monthly_data['first']) / monthly_data['first']
+
+    monthly_data['Month'] = monthly_data['date'].dt.strftime('%Y-%m')
+    monthly_data = monthly_data.drop(columns=['date', 'first', 'last'])
+
+    def get_top_n(group, n=5):
+        """Sorts the group and returns the Top N Gainers and Top N Losers"""
+        gainers = group.sort_values(by='Monthly_Return', ascending=False).head(n)
+        losers = group.sort_values(by='Monthly_Return', ascending=True).head(n)
+        return pd.concat([gainers, losers])
+
+    monthly_breakdown = monthly_data.groupby('Month').apply(get_top_n).reset_index(drop=True)
+
+    all_months = monthly_breakdown['Month'].unique()
+
+    charts_data = {}
+
+    for month in all_months:
+        month_df = monthly_breakdown[monthly_breakdown['Month'] == month].copy()
+        charts_data[month] = month_df
+        
+    output_file_name = BASE_DIR / "monthly_top5_gainers_losers.csv"
+    monthly_breakdown.to_csv(output_file_name, index=False)
+
+    num_plots = min(12, len(all_months))
+    if num_plots > 0:
+        fig, axes = plt.subplots(num_plots, 2, figsize=(14, 6 * num_plots))
+        axes = axes.flatten()
+
+        plot_index = 0
+        for i in range(num_plots):
+            month = all_months[i]
+            month_data = charts_data[month].sort_values('Monthly_Return', ascending=False)
+            
+            gainers_df = month_data.head(5)
+            losers_df = month_data.tail(5)
+            
+            ax_gainer = axes[plot_index]
+            gainers_df = gainers_df.sort_values('Monthly_Return', ascending=True) 
+            ax_gainer.barh(gainers_df['Ticker'], gainers_df['Monthly_Return'], color='green')
+            ax_gainer.set_title(f'Top 5 Gainers: {month}', fontsize=12)
+            ax_gainer.set_xlabel('Return (%)', fontsize=10)
+            ax_gainer.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2%}'))
+            plot_index += 1
+            
+            ax_loser = axes[plot_index]
+            losers_df = losers_df.sort_values('Monthly_Return', ascending=False) 
+            ax_loser.barh(losers_df['Ticker'], losers_df['Monthly_Return'], color='red')
+            ax_loser.set_title(f'Top 5 Losers: {month}', fontsize=12)
+            ax_loser.set_xlabel('Return (%)', fontsize=10)
+            ax_loser.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2%}'))
+            plot_index += 1
+
+        plt.tight_layout()
+        st.pyplot(plt)
+    else:
+        print("Not enough data to generate demonstration plots.")
+    
 st.markdown("""
 <style>
 .metric-box {
