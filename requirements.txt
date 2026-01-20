@@ -1,6 +1,8 @@
-pip install streamlit
-pip install pandas
-pip install numpy
-pip install matplotlib
-pip install seaborn
-pip install sqlalchemy
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+psycopg2-binary
+sqlalchemy
