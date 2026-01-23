@@ -272,6 +272,38 @@ with col1:
     plt.title("Stock Price Correlation Heatmap")
     plt.tight_layout()
     st.pyplot(plt)
+    
+    # Copy correlation matrix
+    corr = corr_matrix.copy()
+
+    # Set diagonal to NaN (remove self-correlation)
+    np.fill_diagonal(corr.values, np.nan)
+
+    # Convert to long format
+    corr_pairs = (
+        corr
+        .stack()
+        .reset_index()
+    )
+
+    corr_pairs.columns = ['Stock_1', 'Stock_2', 'Correlation']
+
+    # Remove duplicate pairs (A-B vs B-A)
+    corr_pairs['pair'] = corr_pairs.apply(
+        lambda x: '-'.join(sorted([str(x['Stock_1']), str(x['Stock_2'])])),
+        axis=1
+    )
+
+    corr_pairs = corr_pairs.drop_duplicates('pair')
+
+    # Sort by absolute correlation
+    top_10_corr = corr_pairs.reindex(
+        corr_pairs['Correlation'].abs().sort_values(ascending=False).index
+    ).head(10)
+
+    st.subheader('Top 10 - Stock Price Correlation')
+    
+    st.dataframe(top_10_corr, hide_index=True)
 
 col1, = st.columns(1)
 with col1:
